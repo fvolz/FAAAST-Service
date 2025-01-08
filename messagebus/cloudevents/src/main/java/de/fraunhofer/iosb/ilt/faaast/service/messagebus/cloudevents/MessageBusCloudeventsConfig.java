@@ -17,6 +17,7 @@ package de.fraunhofer.iosb.ilt.faaast.service.messagebus.cloudevents;
 import de.fraunhofer.iosb.ilt.faaast.service.config.CertificateConfig;
 import de.fraunhofer.iosb.ilt.faaast.service.messagebus.MessageBusConfig;
 import java.util.Objects;
+import java.util.UUID;
 
 
 /**
@@ -24,7 +25,7 @@ import java.util.Objects;
  */
 public class MessageBusCloudeventsConfig extends MessageBusConfig<MessageBusCloudevents> {
 
-    private static final String DEFAULT_CLIENT_ID = "FA³ST Cloudevents MessageBus";
+    private static final String DEFAULT_CLIENT_ID = "FA³ST Cloudevents" + UUID.randomUUID();
     private static final String DEFAULT_CLIENT_KEYSTORE_PASSWORD = "";
     private static final String DEFAULT_CLIENT_KEYSTORE_PATH = "";
     private static final String DEFAULT_HOST = "tcp://localhost:1883";

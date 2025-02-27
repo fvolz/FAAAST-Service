@@ -46,6 +46,8 @@ public class MessageBusCloudeventsConfig extends MessageBusConfig<MessageBusClou
                 .build();
         this.clientId = DEFAULT_CLIENT_ID;
         this.topicPrefix = DEFAULT_TOPIC_PREFIX;
+        this.user = "user";
+        this.password = "password";
     }
 
 

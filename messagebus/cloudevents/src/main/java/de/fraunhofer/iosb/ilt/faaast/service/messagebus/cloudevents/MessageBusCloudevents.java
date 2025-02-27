@@ -77,7 +77,18 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
     @Override
     public void publish(EventMessage message) throws MessageBusException {
         try {
-            client.publish(config.getTopicPrefix(), objectMapper.writeValueAsString(createCloudevent(message)));
+            Class<? extends EventMessage> messageType = message.getClass();
+            String newType = "";
+            switch (messageType.getSimpleName()) {
+                case "ValueChangeEventMessage":
+                    newType = "ValueChangedEvent";
+                case "ElementCreateEventMessage":
+                    newType = "ElementCreatedEvent";
+                default:
+            }
+            if(newType != "") {
+                client.publish(config.getTopicPrefix(), objectMapper.writeValueAsString(createCloudevent(message, newType)));
+            }
         }
         catch (Exception e) {
             throw new MessageBusException("Error publishing event via Cloudevents MQTT message bus", e);
@@ -85,10 +96,10 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
     }
 
 
-    private CloudEvent createCloudevent(EventMessage message) throws SerializationException, URISyntaxException {
-        Class<? extends EventMessage> messageType = message.getClass();
+    private CloudEvent createCloudevent(EventMessage message, String type) throws SerializationException, URISyntaxException {
+
         return CloudEventBuilder.v1()
-                .withType("org.factory-x.events.v1." + messageType.getSimpleName())
+                .withType("org.factory-x.events.v1." + type)
                 .withSubject(message.getElement().getKeys().get(0).getType().name())
                 .withSource(new URI(message.getElement().getKeys().get(0).getValue()))
                 .withId(UUID.randomUUID().toString())

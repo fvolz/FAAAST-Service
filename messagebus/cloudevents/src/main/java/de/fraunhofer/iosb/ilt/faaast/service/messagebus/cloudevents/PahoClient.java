@@ -16,17 +16,11 @@ package de.fraunhofer.iosb.ilt.faaast.service.messagebus.cloudevents;
 
 import de.fraunhofer.iosb.ilt.faaast.service.config.CertificateConfig;
 import de.fraunhofer.iosb.ilt.faaast.service.exception.MessageBusException;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.security.GeneralSecurityException;
-import java.security.KeyStore;
+import java.security.cert.X509Certificate;
 import java.util.Objects;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.*;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
@@ -150,22 +144,26 @@ public class PahoClient {
 
 
     private SSLSocketFactory getSSLSocketFactory(CertificateConfig certificate) throws GeneralSecurityException, IOException {
-        try (InputStream keyStoreInputStream = new FileInputStream(certificate.getKeyStorePath())) {
-            KeyStore keystore = KeyStore.getInstance(certificate.getKeyStoreType());
-            keystore.load(keyStoreInputStream, certificate.getKeyStorePassword().toCharArray());
+        SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+        TrustManager[] trustAllCerts = new TrustManager[] {
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
 
-            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            keyManagerFactory.init(keystore, Objects.nonNull(certificate.getKeyPassword()) ? certificate.getKeyPassword().toCharArray() : new char[0]);
 
-            TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            trustManagerFactory.init(keystore);
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                        // Trust all client certificates
+                    }
 
-            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-            TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
-            sslContext.init(keyManagerFactory.getKeyManagers(), trustManagers, null);
 
-            return sslContext.getSocketFactory();
-        }
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                        // Trust all server certificates
+                    }
+                }
+        };
+        sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+        return sslContext.getSocketFactory();
     }
 
 

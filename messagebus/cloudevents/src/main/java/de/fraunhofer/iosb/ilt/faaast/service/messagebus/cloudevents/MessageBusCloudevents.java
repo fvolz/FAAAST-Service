@@ -17,7 +17,6 @@ package de.fraunhofer.iosb.ilt.faaast.service.messagebus.cloudevents;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.fraunhofer.iosb.ilt.faaast.service.ServiceContext;
 import de.fraunhofer.iosb.ilt.faaast.service.config.CoreConfig;
-import de.fraunhofer.iosb.ilt.faaast.service.dataformat.SerializationException;
 import de.fraunhofer.iosb.ilt.faaast.service.dataformat.json.JsonEventDeserializer;
 import de.fraunhofer.iosb.ilt.faaast.service.dataformat.json.JsonEventSerializer;
 import de.fraunhofer.iosb.ilt.faaast.service.exception.ConfigurationInitializationException;
@@ -28,14 +27,13 @@ import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.SubscriptionId;
 import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.SubscriptionInfo;
 import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.event.change.ElementCreateEventMessage;
 import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.event.change.ValueChangeEventMessage;
+import de.fraunhofer.iosb.ilt.faaast.service.model.value.PropertyValue;
 import de.fraunhofer.iosb.ilt.faaast.service.util.Ensure;
 import io.cloudevents.CloudEvent;
 import io.cloudevents.core.builder.CloudEventBuilder;
 import io.cloudevents.jackson.JsonFormat;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ScanResult;
-import io.netty.handler.codec.base64.Base64Encoder;
-
 import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -82,7 +80,7 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
     public void publish(EventMessage message) throws MessageBusException {
         try {
             CloudEvent cloudMessage = createCloudevent(message);
-            if(cloudMessage != null) {
+            if (cloudMessage != null) {
                 client.publish(config.getTopicPrefix(), objectMapper.writeValueAsString(cloudMessage));
             }
         }
@@ -93,28 +91,48 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
 
 
     private CloudEvent createCloudevent(EventMessage message) throws URISyntaxException {
-        if(message.getClass().isAssignableFrom(ElementCreateEventMessage.class)) {
-            return CloudEventBuilder.v1()
-                    .withType("org.factory-x.events.v1." + "ElementCreatedEvent")
-                    .withSource(new URI("uri:aas:shells/"+
-                            Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
-                    .withId(UUID.randomUUID().toString())
-                    .withTime(OffsetDateTime.now())
-                    .withDataContentType("application/json")
-                    .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
-                    .withData(((ElementCreateEventMessage) message).getValue().toString().getBytes())
-                    .build();
-        } else if(message.getClass().isAssignableFrom(ValueChangeEventMessage.class)) {
+        if (message.getClass().isAssignableFrom(ElementCreateEventMessage.class)) {
+            if (message.getElement().toString().contains("ASSET_ADMINISTRATION_SHELL")) {
+                return CloudEventBuilder.v1()
+                        .withType("org.factory-x.events.v1." + "ElementCreatedEvent")
+                        .withSource(new URI("uri:aas:shells/" +
+                                Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
+                        .withId(UUID.randomUUID().toString())
+                        .withTime(OffsetDateTime.now())
+                        .withDataContentType("application/json")
+                        .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
+                        .withData(((ElementCreateEventMessage) message).getValue().toString().getBytes())
+                        .build();
+            }
+            else {
+                return CloudEventBuilder.v1()
+                        .withType("org.factory-x.events.v1." + "ElementCreatedEvent")
+                        .withSource(new URI("uri:submodels/" +
+                                Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
+                        .withId(UUID.randomUUID().toString())
+                        .withTime(OffsetDateTime.now())
+                        .withDataContentType("application/json")
+                        .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Submodel"))
+                        .withData(((ElementCreateEventMessage) message).getValue().toString().getBytes())
+                        .build();
+            }
+        }
+        else if (message.getClass().isAssignableFrom(ValueChangeEventMessage.class)) {
             return CloudEventBuilder.v1()
                     .withType("org.factory-x.events.v1." + "ValueChangedEvent")
-                    .withSource(new URI("uri:aas:submodels/"+message.getElement().getKeys().get(0).getValue()))
+                    .withSource(new URI("uri:submodels/" +
+                            Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())
+                            + "/submodel-elements/" + message.getElement().getKeys().get(1).getValue()))
                     .withId(UUID.randomUUID().toString())
                     .withTime(OffsetDateTime.now())
                     .withDataContentType("application/json")
-                    .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
-                    .withData(((ValueChangeEventMessage) message).getNewValue().toString().getBytes())
+                    .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Property"))
+                    .withData(
+                            ((PropertyValue) ((ValueChangeEventMessage) message).getNewValue())
+                                    .getValue().getValue().toString().getBytes())
                     .build();
-        } else {
+        }
+        else {
             return null;
         }
 

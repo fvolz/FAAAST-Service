@@ -14,6 +14,7 @@
  */
 package de.fraunhofer.iosb.ilt.faaast.service.messagebus.cloudevents;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.fraunhofer.iosb.ilt.faaast.service.ServiceContext;
 import de.fraunhofer.iosb.ilt.faaast.service.config.CoreConfig;
@@ -90,7 +91,7 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
     }
 
 
-    private CloudEvent createCloudevent(EventMessage message) throws URISyntaxException {
+    private CloudEvent createCloudevent(EventMessage message) throws URISyntaxException, JsonProcessingException {
         if (message.getClass().isAssignableFrom(ElementCreateEventMessage.class)) {
             if (message.getElement().toString().contains("ASSET_ADMINISTRATION_SHELL")) {
                 return CloudEventBuilder.v1()
@@ -101,7 +102,7 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
                         .withTime(OffsetDateTime.now())
                         .withDataContentType("application/json")
                         .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
-                        .withData(((ElementCreateEventMessage) message).getValue().toString().getBytes())
+                        .withData(objectMapper.writeValueAsString(((ElementCreateEventMessage) message).getValue()).getBytes())
                         .build();
             }
             else {
@@ -113,7 +114,7 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
                         .withTime(OffsetDateTime.now())
                         .withDataContentType("application/json")
                         .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Submodel"))
-                        .withData(((ElementCreateEventMessage) message).getValue().toString().getBytes())
+                        .withData(objectMapper.writeValueAsString(((ElementCreateEventMessage) message).getValue()).getBytes())
                         .build();
             }
         }
@@ -128,8 +129,8 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
                     .withDataContentType("application/json")
                     .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Property"))
                     .withData(
-                            ((PropertyValue) ((ValueChangeEventMessage) message).getNewValue())
-                                    .getValue().getValue().toString().getBytes())
+                            objectMapper.writeValueAsString(((PropertyValue) ((ValueChangeEventMessage) message)
+                                    .getNewValue()).getValue().getValue()).getBytes())
                     .build();
         }
         else {

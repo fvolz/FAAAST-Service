@@ -14,8 +14,11 @@
  */
 package de.fraunhofer.iosb.ilt.faaast.service.messagebus.cloudevents;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import de.fraunhofer.iosb.ilt.faaast.service.ServiceContext;
 import de.fraunhofer.iosb.ilt.faaast.service.config.CoreConfig;
 import de.fraunhofer.iosb.ilt.faaast.service.dataformat.json.JsonEventDeserializer;
@@ -27,8 +30,7 @@ import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.EventMessage;
 import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.SubscriptionId;
 import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.SubscriptionInfo;
 import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.event.change.ElementCreateEventMessage;
-import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.event.change.ValueChangeEventMessage;
-import de.fraunhofer.iosb.ilt.faaast.service.model.value.PropertyValue;
+import de.fraunhofer.iosb.ilt.faaast.service.model.messagebus.event.change.ElementUpdateEventMessage;
 import de.fraunhofer.iosb.ilt.faaast.service.util.Ensure;
 import io.cloudevents.CloudEvent;
 import io.cloudevents.core.builder.CloudEventBuilder;
@@ -72,7 +74,10 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
     public void init(CoreConfig coreConfig, MessageBusCloudeventsConfig config, ServiceContext serviceContext) throws ConfigurationInitializationException {
         this.config = config;
         client = new PahoClient(config);
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = new ObjectMapper()
+                .enable(SerializationFeature.INDENT_OUTPUT)
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
         objectMapper.registerModule(JsonFormat.getCloudEventJacksonModule());
     }
 
@@ -92,51 +97,78 @@ public class MessageBusCloudevents implements MessageBus<MessageBusCloudeventsCo
 
 
     private CloudEvent createCloudevent(EventMessage message) throws URISyntaxException, JsonProcessingException {
-        if (message.getClass().isAssignableFrom(ElementCreateEventMessage.class)) {
-            if (message.getElement().toString().contains("ASSET_ADMINISTRATION_SHELL")) {
-                return CloudEventBuilder.v1()
-                        .withType("org.factory-x.events.v1." + "ElementCreatedEvent")
-                        .withSource(new URI("uri:aas:shells/" +
-                                Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
-                        .withId(UUID.randomUUID().toString())
-                        .withTime(OffsetDateTime.now())
-                        .withDataContentType("application/json")
-                        .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
-                        .withData(objectMapper.writeValueAsString(((ElementCreateEventMessage) message).getValue()).getBytes())
-                        .build();
-            }
-            else {
-                return CloudEventBuilder.v1()
-                        .withType("org.factory-x.events.v1." + "ElementCreatedEvent")
-                        .withSource(new URI("uri:submodels/" +
-                                Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
-                        .withId(UUID.randomUUID().toString())
-                        .withTime(OffsetDateTime.now())
-                        .withDataContentType("application/json")
-                        .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Submodel"))
-                        .withData(objectMapper.writeValueAsString(((ElementCreateEventMessage) message).getValue()).getBytes())
-                        .build();
-            }
+        boolean isAas = message.getElement().toString().contains("ASSET_ADMINISTRATION_SHELL");
+
+        if (message instanceof ElementCreateEventMessage) {
+            return isAas ? AasElementCreated(message) : SubmodelElementCreated(message);
         }
-        else if (message.getClass().isAssignableFrom(ValueChangeEventMessage.class)) {
-            return CloudEventBuilder.v1()
-                    .withType("org.factory-x.events.v1." + "ValueChangedEvent")
-                    .withSource(new URI("uri:submodels/" +
-                            Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())
-                            + "/submodel-elements/" + message.getElement().getKeys().get(1).getValue()))
-                    .withId(UUID.randomUUID().toString())
-                    .withTime(OffsetDateTime.now())
-                    .withDataContentType("application/json")
-                    .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Property"))
-                    .withData(
-                            objectMapper.writeValueAsString(((PropertyValue) ((ValueChangeEventMessage) message)
-                                    .getNewValue()).getValue().getValue()).getBytes())
-                    .build();
+        else if (message instanceof ElementUpdateEventMessage) {
+            return isAas ? AasValueChanged(message) : SubmodelValueChanged(message);
         }
         else {
             return null;
         }
+    }
 
+
+    private CloudEvent AasElementCreated(EventMessage message) throws URISyntaxException, JsonProcessingException {
+        return CloudEventBuilder.v1()
+                .withType("org.factory-x.events.v1." + "AASElementCreated")
+                .withSource(new URI("uri:aas:shells/" +
+                        Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
+                .withId(UUID.randomUUID().toString())
+                .withTime(OffsetDateTime.now())
+                .withDataContentType("application/json")
+                .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
+                .withData(objectMapper.writeValueAsString(((ElementCreateEventMessage) message).getValue()).getBytes())
+                .build();
+    }
+
+
+    private CloudEvent AasValueChanged(EventMessage message) throws URISyntaxException, JsonProcessingException {
+        return CloudEventBuilder.v1()
+                .withType("org.factory-x.events.v1." + "AASValueChanged")
+                .withSource(new URI("uri:aas:shells/" +
+                        Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
+                .withId(UUID.randomUUID().toString())
+                .withTime(OffsetDateTime.now())
+                .withDataContentType("application/json")
+                .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/AssetAdministrationShell"))
+                .withData(objectMapper.writeValueAsString(((ElementUpdateEventMessage) message).getValue()).getBytes())
+                .build();
+    }
+
+
+    private CloudEvent SubmodelValueChanged(EventMessage message) throws URISyntaxException, JsonProcessingException {
+        boolean hasProperty = message.getElement().getKeys().size() > 1;
+        URI source = hasProperty ? new URI("uri:submodels/" +
+                Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())
+                + "/submodel-elements/" + message.getElement().getKeys().get(1).getValue())
+                : new URI("uri:submodels/" +
+                        Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes()));
+        return CloudEventBuilder.v1()
+                .withType("org.factory-x.events.v1." + "SubmodelValueChanged")
+                .withSource(source)
+                .withId(UUID.randomUUID().toString())
+                .withTime(OffsetDateTime.now())
+                .withDataContentType("application/json")
+                .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Submodel"))
+                .withData(objectMapper.writeValueAsString(((ElementUpdateEventMessage) message).getValue()).getBytes())
+                .build();
+    }
+
+
+    private CloudEvent SubmodelElementCreated(EventMessage message) throws JsonProcessingException, URISyntaxException {
+        return CloudEventBuilder.v1()
+                .withType("org.factory-x.events.v1." + "SubmodelElementCreated")
+                .withSource(new URI("uri:submodels/" +
+                        Base64.getEncoder().encodeToString(message.getElement().getKeys().get(0).getValue().getBytes())))
+                .withId(UUID.randomUUID().toString())
+                .withTime(OffsetDateTime.now())
+                .withDataContentType("application/json")
+                .withDataSchema(new URI("https://api.swaggerhub.com/domains/Plattform_i40/Part1-MetaModel-Schemas/V3.1.0#/components/schemas/Submodel"))
+                .withData(objectMapper.writeValueAsString(((ElementCreateEventMessage) message).getValue()).getBytes())
+                .build();
     }
 
 
